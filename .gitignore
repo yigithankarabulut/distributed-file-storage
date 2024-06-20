@@ -13,3 +13,4 @@
 /dist/
 /out/
 go.work
+/bin/
