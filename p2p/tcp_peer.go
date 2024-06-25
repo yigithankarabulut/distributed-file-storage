@@ -1,15 +1,21 @@
 package p2p
 
-import "net"
+import (
+	"net"
+	"sync"
+)
 
 // TCPPeer represents a peer in a TCP network.
 type TCPPeer struct {
-	// conn is the underlying connection to the peer.
-	conn net.Conn
+	// the underlying connection of the peer. Which in this case
+	// is a TCP connection.
+	net.Conn
 
 	// if we dial and retrieve a connection, outbound == true
 	// if we accept and retrieve a connection, outbound == false
 	outbound bool
+
+	Wg *sync.WaitGroup
 }
 
 // TCPPeerOption is a functional option for configuring a TCPPeer.
@@ -18,7 +24,7 @@ type TCPPeerOption func(*TCPPeer)
 // WithTCPPeerConn is a functional option for setting the connection of the TCPPeer.
 func WithTCPPeerConn(conn net.Conn) TCPPeerOption {
 	return func(p *TCPPeer) {
-		p.conn = conn
+		p.Conn = conn
 	}
 }
 
@@ -31,15 +37,18 @@ func WithTCPPeerOutbound(outbound bool) TCPPeerOption {
 
 // NewTCPPeer creates a new TCPPeer with the given options.
 func NewTCPPeer(opts ...TCPPeerOption) *TCPPeer {
-	p := &TCPPeer{}
+	p := &TCPPeer{
+		Wg: &sync.WaitGroup{},
+	}
 	for _, opt := range opts {
 		opt(p)
 	}
 	return p
 }
 
-// Close closes the underlying connection to the peer.
+// Send sends data to the peer.
 // Implement the Peer interface.
-func (p *TCPPeer) Close() error {
-	return p.conn.Close()
+func (p *TCPPeer) Send(data []byte) error {
+	_, err := p.Conn.Write(data)
+	return err
 }

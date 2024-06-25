@@ -2,13 +2,11 @@ package main
 
 import (
 	"bytes"
-	//nolint:gosec
 	"crypto/sha1" //nolint:gosec
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
-	"io/fs"
 	"log"
 	"os"
 	"strings"
@@ -104,6 +102,11 @@ func NewStore(opts ...StoreOption) *Store {
 	return s
 }
 
+// Clear clears the all folders/files in the storage.
+func (s *Store) Clear() error {
+	return os.RemoveAll(s.Root)
+}
+
 // Has checks if a key exists in the storage.
 func (s *Store) Has(key string) bool {
 	pathKey := s.PathTransformFunc(key)
@@ -111,7 +114,7 @@ func (s *Store) Has(key string) bool {
 
 	_, err := os.Stat(pathNameWithRoot)
 
-	return !errors.Is(err, fs.ErrNotExist)
+	return !errors.Is(err, os.ErrNotExist)
 }
 
 // Delete deletes a key from the storage.
@@ -124,6 +127,11 @@ func (s *Store) Delete(key string) error {
 
 	pathNameWithRoot := fmt.Sprintf("%s/%s", s.Root, pathKey.FirstPathName())
 	return os.RemoveAll(pathNameWithRoot)
+}
+
+// Write writes a key to the storage.
+func (s *Store) Write(key string, r io.Reader) (int64, error) {
+	return s.writeStream(key, r)
 }
 
 func (s *Store) Read(key string) (io.Reader, error) {
@@ -146,26 +154,24 @@ func (s *Store) readStream(key string) (io.ReadCloser, error) {
 	return os.Open(pathKeyWithRoot) //nolint:gosec
 }
 
-func (s *Store) writeStream(key string, r io.Reader) error {
+func (s *Store) writeStream(key string, r io.Reader) (int64, error) {
 	pathKey := s.PathTransformFunc(key)
 	pathNameWithRoot := fmt.Sprintf("%s/%s", s.Root, pathKey.PathName)
 	if err := os.MkdirAll(pathNameWithRoot, os.ModePerm); err != nil { //nolint:gosec
-		return err
+		return 0, err
 	}
 
 	fullPathWithRoot := fmt.Sprintf("%s/%s", s.Root, pathKey.FullPath())
 
 	f, err := os.Create(fullPathWithRoot) //nolint:gosec
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	n, err := io.Copy(f, r)
 	if err != nil {
-		return err
+		return 0, err
 	}
 
-	log.Printf("written (%d bytes) to disk: %s\n", n, fullPathWithRoot)
-
-	return nil
+	return n, nil
 }

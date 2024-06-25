@@ -2,9 +2,13 @@ package p2p
 
 import (
 	"errors"
+	"fmt"
 	"log"
 	"net"
 )
+
+// ErrNilListener is an error that is returned when the listener is nil.
+var ErrNilListener = errors.New("listener is nil")
 
 // TCPTransport is a transport implementation that uses TCP as the underlying network protocol.
 type TCPTransport struct {
@@ -65,6 +69,28 @@ func (t *TCPTransport) Consume() <-chan RPC {
 	return t.rpcCh
 }
 
+// Close implements the Transport interface, which will close the transport and stop
+// listening for incoming connections.
+func (t *TCPTransport) Close() error {
+	if t.listener != nil {
+		return t.listener.Close()
+	}
+	return ErrNilListener
+}
+
+// Dial implements the Transport interface, which will dial a connection to the given address
+// and then handle the connection.
+func (t *TCPTransport) Dial(addr string) error {
+	conn, err := net.Dial("tcp", addr)
+	if err != nil {
+		return err
+	}
+
+	go t.handleConn(conn, true)
+
+	return nil
+}
+
 // ListenAndAccept implements the Transport interface, which will listen for incoming
 // connections and accept them, and then handle the connection.
 func (t *TCPTransport) ListenAndAccept() error {
@@ -77,23 +103,27 @@ func (t *TCPTransport) ListenAndAccept() error {
 
 	go t.startAcceptLoop()
 
+	log.Printf("TCP transport listening on port [%s]\n", t.ListenAddr)
+
 	return nil
 }
 
 func (t *TCPTransport) startAcceptLoop() {
 	for {
 		conn, err := t.listener.Accept()
+		if errors.Is(err, net.ErrClosed) {
+			return
+		}
+
 		if err != nil {
 			log.Printf("tcp accept error: %s\n", err.Error())
 		}
 
-		log.Printf("new incoming connection: %+v\n", conn)
-
-		go t.handleConn(conn)
+		go t.handleConn(conn, false)
 	}
 }
 
-func (t *TCPTransport) handleConn(conn net.Conn) {
+func (t *TCPTransport) handleConn(conn net.Conn, outbound bool) {
 	var err error
 
 	defer func() {
@@ -103,7 +133,7 @@ func (t *TCPTransport) handleConn(conn net.Conn) {
 
 	peer := NewTCPPeer(
 		WithTCPPeerConn(conn),
-		WithTCPPeerOutbound(true),
+		WithTCPPeerOutbound(outbound),
 	)
 	if err = t.ShakeHands(peer); err != nil {
 		return
@@ -128,6 +158,11 @@ func (t *TCPTransport) handleConn(conn net.Conn) {
 		}
 
 		rpc.From = conn.RemoteAddr()
+		peer.Wg.Add(1)
+		fmt.Println("waiting till stream is donne")
 		t.rpcCh <- rpc
+		peer.Wg.Wait()
+		fmt.Println("stream done continueing normal read loop")
+
 	}
 }
