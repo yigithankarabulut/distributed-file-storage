@@ -36,7 +36,7 @@ func TestDelete(t *testing.T) {
 		t.Error(err)
 	}
 
-	if _, err := s.Read(key); err == nil {
+	if _, _, err := s.Read(key); err == nil {
 		t.Error("expected error, got nil")
 	}
 }
@@ -57,7 +57,7 @@ func TestStore(t *testing.T) {
 			t.Errorf("expected %s to exist", key)
 		}
 
-		r, err := s.Read(key)
+		_, r, err := s.Read(key)
 		if err != nil {
 			t.Error(err)
 		}

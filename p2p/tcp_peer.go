@@ -15,7 +15,7 @@ type TCPPeer struct {
 	// if we accept and retrieve a connection, outbound == false
 	outbound bool
 
-	Wg *sync.WaitGroup
+	wg *sync.WaitGroup
 }
 
 // TCPPeerOption is a functional option for configuring a TCPPeer.
@@ -38,7 +38,7 @@ func WithTCPPeerOutbound(outbound bool) TCPPeerOption {
 // NewTCPPeer creates a new TCPPeer with the given options.
 func NewTCPPeer(opts ...TCPPeerOption) *TCPPeer {
 	p := &TCPPeer{
-		Wg: &sync.WaitGroup{},
+		wg: &sync.WaitGroup{},
 	}
 
 	for _, opt := range opts {
@@ -52,4 +52,10 @@ func NewTCPPeer(opts ...TCPPeerOption) *TCPPeer {
 func (p *TCPPeer) Send(data []byte) error {
 	_, err := p.Conn.Write(data)
 	return err
+}
+
+// CloseStream closes the stream of the peer.
+// Implement the Peer interface.
+func (p *TCPPeer) CloseStream() {
+	p.wg.Done()
 }
