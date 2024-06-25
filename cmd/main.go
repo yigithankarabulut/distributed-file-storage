@@ -6,24 +6,26 @@ import (
 	"log"
 	"time"
 
+	"github.com/yigithankarabulut/distributed-file-storage/fileserver"
 	"github.com/yigithankarabulut/distributed-file-storage/p2p"
+	"github.com/yigithankarabulut/distributed-file-storage/store"
 )
 
-func makeServer(listenAddr string, nodes ...string) *FileServer {
+func makeServer(listenAddr string, nodes ...string) *fileserver.FileServer {
 	tcpTransport := p2p.NewTCPTransport(
 		p2p.WithListenAddr(listenAddr),
 		p2p.WithHandshakeFunc(p2p.NOPHandshakeFunc),
 		p2p.WithDecoder(&p2p.DefaultDecoder{}),
 	)
 
-	fileServerOpts := FileServerOpts{
+	fileServerOpts := fileserver.ServerOpts{
 		StorageRoot:       listenAddr + "_network",
-		PathTransformFunc: CASPathTransformFunc,
+		PathTransformFunc: store.CASPathTransformFunc,
 		Transport:         tcpTransport,
 		BootstrapNodes:    nodes,
 	}
 
-	s := NewFileServer(fileServerOpts)
+	s := fileserver.NewFileServer(fileServerOpts)
 
 	tcpTransport.OnPeer = s.OnPeer
 
@@ -59,5 +61,6 @@ func main() {
 	}
 
 	fmt.Println(string(b))
-
 }
+
+// 8:04. creating crypto file.

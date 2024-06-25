@@ -1,4 +1,4 @@
-package main
+package fileserver
 
 import (
 	"bytes"
@@ -11,55 +11,40 @@ import (
 	"time"
 
 	"github.com/yigithankarabulut/distributed-file-storage/p2p"
+	"github.com/yigithankarabulut/distributed-file-storage/store"
 )
 
-// Message is a struct that contains the payload of the message.
-type Message struct {
-	Payload any
-}
-
-// MessageStoreFile is a struct that contains the key and the size of the file.
-type MessageStoreFile struct {
-	Key  string
-	Size int64
-}
-
-// MessageGetFile is a struct that contains the key of the file.
-type MessageGetFile struct {
-	Key string
-}
-
-// FileServerOpts is a struct that contains the configuration for the file server.
-type FileServerOpts struct {
+// ServerOpts is a struct that contains the configuration for the file server.
+type ServerOpts struct {
 	ListenAddr        string
 	StorageRoot       string
-	PathTransformFunc PathTransformFunc
+	PathTransformFunc store.PathTransformFunc
 	Transport         p2p.Transport
 	BootstrapNodes    []string
 }
 
 // FileServer is a struct that contains the configuration for the file server.
 type FileServer struct {
-	FileServerOpts
+	ServerOpts
 
 	peerLock sync.Mutex
 	peers    map[string]p2p.Peer
 
-	store    *Store
+	store    *store.Store
 	doneChan chan struct{}
 }
 
 // NewFileServer creates a new file server instance with the given options.
-func NewFileServer(opts FileServerOpts) *FileServer {
-	store := NewStore(
-		WithRoot(opts.StorageRoot),
-		WithPathTransformFunc(opts.PathTransformFunc),
+func NewFileServer(opts ServerOpts) *FileServer {
+	s := store.NewStore(
+		store.WithRoot(opts.StorageRoot),
+		store.WithPathTransformFunc(opts.PathTransformFunc),
 	)
 	return &FileServer{
-		FileServerOpts: opts,
-		store:          store,
-		doneChan:       make(chan struct{}),
-		peers:          make(map[string]p2p.Peer),
+		ServerOpts: opts,
+		store:      s,
+		doneChan:   make(chan struct{}),
+		peers:      make(map[string]p2p.Peer),
 	}
 }
 
@@ -175,15 +160,15 @@ func (s *FileServer) Store(key string, r io.Reader) error {
 	return nil
 }
 
-func (s *FileServer) stream(msg *Message) error {
-	peers := make([]io.Writer, 0, len(s.peers))
-	for _, peer := range s.peers {
-		peers = append(peers, peer)
-	}
-
-	mw := io.MultiWriter(peers...)
-	return gob.NewEncoder(mw).Encode(msg)
-}
+// func (s *FileServer) stream(msg *Message) error {
+//	peers := make([]io.Writer, 0, len(s.peers))
+//	for _, peer := range s.peers {
+//		peers = append(peers, peer)
+//	}
+//
+//	mw := io.MultiWriter(peers...)
+//	return gob.NewEncoder(mw).Encode(msg)
+// }
 
 func (s *FileServer) broadcast(msg *Message) error {
 	buf := new(bytes.Buffer)

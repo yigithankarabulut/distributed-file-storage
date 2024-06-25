@@ -1,69 +1,15 @@
-package main
+package store
 
 import (
-	"crypto/sha1" //nolint:gosec
-	"encoding/hex"
+	//nolint:gosec
 	"errors"
 	"fmt"
 	"io"
 	"log"
 	"os"
-	"strings"
 )
 
 const defaultRootFolderName = "store"
-
-// CASPathTransformFunc is a function that transforms a key into a CAS path.
-// CAS stands for Content Addressable Storage.
-func CASPathTransformFunc(key string) PathKey {
-	hash := sha1.Sum([]byte(key)) //nolint:gosec
-	hashStr := hex.EncodeToString(hash[:])
-
-	blockSize := 5
-	sliceLen := len(hashStr) / blockSize
-	paths := make([]string, sliceLen)
-
-	for i := 0; i < sliceLen; i++ {
-		from, to := i*blockSize, (i*blockSize)+blockSize
-		paths[i] = hashStr[from:to]
-	}
-
-	return PathKey{
-		PathName: strings.Join(paths, "/"),
-		FileName: hashStr,
-	}
-}
-
-// PathTransformFunc is a function that transforms a path.
-type PathTransformFunc func(string) PathKey
-
-// DefaultPathTransformFunc is the default path transform function.
-var DefaultPathTransformFunc = func(key string) PathKey {
-	return PathKey{
-		PathName: key,
-		FileName: key,
-	}
-}
-
-// PathKey is a struct that contains the pathname and the original key.
-type PathKey struct {
-	PathName string
-	FileName string
-}
-
-// FirstPathName returns the first path name of the PathKey.
-func (p PathKey) FirstPathName() string {
-	paths := strings.Split(p.PathName, "/")
-	if len(paths) == 0 {
-		return ""
-	}
-	return paths[0]
-}
-
-// FullPath returns the filename of the PathKey.
-func (p PathKey) FullPath() string {
-	return p.PathName + "/" + p.FileName
-}
 
 // Store is an interface that can be implemented to store.
 type Store struct {
@@ -72,25 +18,25 @@ type Store struct {
 	PathTransformFunc PathTransformFunc
 }
 
-// StoreOption is a functional option for configuring a Store.
-type StoreOption func(*Store)
+// Option is a functional option for configuring a Store.
+type Option func(*Store)
 
 // WithRoot is a functional option for setting the root of the Store.
-func WithRoot(root string) StoreOption {
+func WithRoot(root string) Option {
 	return func(s *Store) {
 		s.Root = root
 	}
 }
 
 // WithPathTransformFunc is a functional option for setting the path transform function of the Store.
-func WithPathTransformFunc(f PathTransformFunc) StoreOption {
+func WithPathTransformFunc(f PathTransformFunc) Option {
 	return func(s *Store) {
 		s.PathTransformFunc = f
 	}
 }
 
 // NewStore creates a new Store with the given options.
-func NewStore(opts ...StoreOption) *Store {
+func NewStore(opts ...Option) *Store {
 	s := &Store{
 		PathTransformFunc: DefaultPathTransformFunc,
 		Root:              defaultRootFolderName,
