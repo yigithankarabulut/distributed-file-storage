@@ -40,6 +40,7 @@ func NewTCPPeer(opts ...TCPPeerOption) *TCPPeer {
 	p := &TCPPeer{
 		Wg: &sync.WaitGroup{},
 	}
+
 	for _, opt := range opts {
 		opt(p)
 	}

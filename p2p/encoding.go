@@ -28,6 +28,19 @@ type DefaultDecoder struct{}
 // Decode decodes a message from a reader into an RPC message.
 // Implements the Decoder interface.
 func (d DefaultDecoder) Decode(r io.Reader, msg *RPC) error {
+	peakBuf := make([]byte, 1)
+	if _, err := r.Read(peakBuf); err != nil {
+		return nil //nolint:nilerr
+	}
+
+	// In case of a stream we are not decoding what is being sent over the network
+	// we are just setting stream true, so we can handle that in our logic.
+	stream := peakBuf[0] == IncomingStream
+	if stream {
+		msg.Stream = true
+		return nil
+	}
+
 	buf := make([]byte, 1028)
 	n, err := r.Read(buf)
 	if err != nil {

@@ -11,6 +11,7 @@ type Peer interface {
 // Transport represents a network transport that can listen for incoming
 // connections and accept them, as well as send and receive messages.
 type Transport interface {
+	Addr() string
 	Dial(string) error
 	ListenAndAccept() error
 	Consume() <-chan RPC

@@ -28,7 +28,7 @@ func TestDelete(t *testing.T) {
 	key := "my-special-picture"
 	data := []byte("some jpg bytes")
 
-	if err := s.writeStream(key, bytes.NewReader(data)); err != nil {
+	if _, err := s.writeStream(key, bytes.NewReader(data)); err != nil {
 		t.Error(err)
 	}
 
@@ -49,7 +49,7 @@ func TestStore(t *testing.T) {
 		key := fmt.Sprintf("foo-%d", i)
 		data := []byte("some jpg bytes")
 
-		if err := s.writeStream(key, bytes.NewReader(data)); err != nil {
+		if _, err := s.writeStream(key, bytes.NewReader(data)); err != nil {
 			t.Error(err)
 		}
 
