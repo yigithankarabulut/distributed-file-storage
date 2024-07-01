@@ -10,12 +10,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/yigithankarabulut/distributed-file-storage/crypto"
 	"github.com/yigithankarabulut/distributed-file-storage/p2p"
 	"github.com/yigithankarabulut/distributed-file-storage/store"
 )
 
 // ServerOpts is a struct that contains the configuration for the file server.
 type ServerOpts struct {
+	EncryptKey        []byte
 	ListenAddr        string
 	StorageRoot       string
 	PathTransformFunc store.PathTransformFunc
@@ -30,7 +32,7 @@ type FileServer struct {
 	peerLock sync.Mutex
 	peers    map[string]p2p.Peer
 
-	store    *store.Store
+	Storage  *store.Store
 	doneChan chan struct{}
 }
 
@@ -42,7 +44,7 @@ func NewFileServer(opts ServerOpts) *FileServer {
 	)
 	return &FileServer{
 		ServerOpts: opts,
-		store:      s,
+		Storage:    s,
 		doneChan:   make(chan struct{}),
 		peers:      make(map[string]p2p.Peer),
 	}
@@ -83,9 +85,9 @@ func (s *FileServer) OnPeer(p p2p.Peer) error {
 // Get gets the data from the file server.
 // It reads the data from the store if it exists, otherwise it fetches the data from the network.
 func (s *FileServer) Get(key string) (io.Reader, error) {
-	if s.store.Has(key) {
+	if s.Storage.Has(key) {
 		fmt.Printf("[%s] serving file (%s) from local disk\n", s.Transport.Addr(), key)
-		_, r, err := s.store.Read(key)
+		_, r, err := s.Storage.Read(key)
 		return r, err
 	}
 
@@ -110,16 +112,18 @@ func (s *FileServer) Get(key string) (io.Reader, error) {
 		if err := binary.Read(peer, binary.LittleEndian, &fileSize); err != nil {
 			return nil, err
 		}
-		n, err := s.store.Write(key, io.LimitReader(peer, fileSize))
+
+		n, err := s.Storage.WriteDecrypt(s.EncryptKey, key, io.LimitReader(peer, fileSize))
 		if err != nil {
 			return nil, err
 		}
+
 		fmt.Printf("[%s] received (%d) bytes over the network from (%s)\n", s.Transport.Addr(), n, peer.RemoteAddr())
 
 		peer.CloseStream()
 	}
 
-	_, r, err := s.store.Read(key)
+	_, r, err := s.Storage.Read(key)
 	return r, err
 }
 
@@ -131,7 +135,7 @@ func (s *FileServer) Store(key string, r io.Reader) error {
 		tee        = io.TeeReader(r, fileBuffer)
 	)
 
-	size, err := s.store.Write(key, tee)
+	size, err := s.Storage.Write(key, tee)
 	if err != nil {
 		return err
 	}
@@ -139,7 +143,7 @@ func (s *FileServer) Store(key string, r io.Reader) error {
 	msg := Message{
 		Payload: MessageStoreFile{
 			Key:  key,
-			Size: size,
+			Size: size + 16,
 		},
 	}
 	if err := s.broadcast(&msg); err != nil {
@@ -150,10 +154,14 @@ func (s *FileServer) Store(key string, r io.Reader) error {
 
 	for _, peer := range s.peers {
 		_ = peer.Send([]byte{p2p.IncomingStream})
-		n, err := io.Copy(peer, fileBuffer)
+		n, err := crypto.CopyEncrypt(s.EncryptKey, fileBuffer, peer)
 		if err != nil {
 			return err
 		}
+		// n, err := io.Copy(peer, fileBuffer)
+		// if err != nil {
+		// 	return err
+		// }
 		fmt.Println("received and written bytes to disk: ", n)
 	}
 
@@ -222,13 +230,13 @@ func (s *FileServer) handleMessage(from string, msg *Message) error {
 }
 
 func (s *FileServer) handleMessageGetFile(from string, msg MessageGetFile) error {
-	if !s.store.Has(msg.Key) {
+	if !s.Storage.Has(msg.Key) {
 		return fmt.Errorf("[%s] need to serve file (%s) but it does not exist on disk", s.Transport.Addr(), msg.Key) //nolint:err113
 	}
 
 	fmt.Printf("[%s] serving file (%s) over the network\n", s.Transport.Addr(), msg.Key)
 
-	fileSize, r, err := s.store.Read(msg.Key)
+	fileSize, r, err := s.Storage.Read(msg.Key)
 	if err != nil {
 		return err
 	}
@@ -264,7 +272,7 @@ func (s *FileServer) handleMessageStoreFile(from string, msg MessageStoreFile) e
 		return fmt.Errorf("peer (%s) could not be found in the peers map", from) //nolint:err113
 	}
 
-	n, err := s.store.Write(msg.Key, io.LimitReader(peer, msg.Size))
+	n, err := s.Storage.Write(msg.Key, io.LimitReader(peer, msg.Size))
 	if err != nil {
 		return err
 	}

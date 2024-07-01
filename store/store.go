@@ -7,6 +7,8 @@ import (
 	"io"
 	"log"
 	"os"
+
+	"github.com/yigithankarabulut/distributed-file-storage/crypto"
 )
 
 const defaultRootFolderName = "store"
@@ -100,6 +102,25 @@ func (s *Store) readStream(key string) (int64, io.ReadCloser, error) {
 	return fi.Size(), file, nil
 }
 
+// WriteDecrypt writes a key to the storage with decryption. It uses the given encryption key to decrypt the data.
+func (s *Store) WriteDecrypt(encryptKey []byte, key string, r io.Reader) (int64, error) {
+	pathKey := s.PathTransformFunc(key)
+	pathNameWithRoot := fmt.Sprintf("%s/%s", s.Root, pathKey.PathName)
+	if err := os.MkdirAll(pathNameWithRoot, os.ModePerm); err != nil { //nolint:gosec
+		return 0, err
+	}
+
+	fullPathWithRoot := fmt.Sprintf("%s/%s", s.Root, pathKey.FullPath())
+
+	f, err := os.Create(fullPathWithRoot) //nolint:gosec
+	if err != nil {
+		return 0, err
+	}
+
+	n, err := crypto.CopyDecrypt(encryptKey, r, f)
+	return int64(n), err
+}
+
 func (s *Store) writeStream(key string, r io.Reader) (int64, error) {
 	pathKey := s.PathTransformFunc(key)
 	pathNameWithRoot := fmt.Sprintf("%s/%s", s.Root, pathKey.PathName)
@@ -114,10 +135,5 @@ func (s *Store) writeStream(key string, r io.Reader) (int64, error) {
 		return 0, err
 	}
 
-	n, err := io.Copy(f, r)
-	if err != nil {
-		return 0, err
-	}
-
-	return n, nil
+	return io.Copy(f, r)
 }

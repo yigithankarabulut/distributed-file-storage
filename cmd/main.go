@@ -1,11 +1,13 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"log"
 	"time"
 
+	"github.com/yigithankarabulut/distributed-file-storage/crypto"
 	"github.com/yigithankarabulut/distributed-file-storage/fileserver"
 	"github.com/yigithankarabulut/distributed-file-storage/p2p"
 	"github.com/yigithankarabulut/distributed-file-storage/store"
@@ -17,8 +19,13 @@ func makeServer(listenAddr string, nodes ...string) *fileserver.FileServer {
 		p2p.WithHandshakeFunc(p2p.NOPHandshakeFunc),
 		p2p.WithDecoder(&p2p.DefaultDecoder{}),
 	)
+	encryptKey, err := crypto.NewEncryptionKey()
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	fileServerOpts := fileserver.ServerOpts{
+		EncryptKey:        encryptKey,
 		StorageRoot:       listenAddr + "_network",
 		PathTransformFunc: store.CASPathTransformFunc,
 		Transport:         tcpTransport,
@@ -46,11 +53,15 @@ func main() {
 	}()
 	time.Sleep(3 * time.Second)
 
-	// data := bytes.NewReader([]byte("my big data file here!"))
-	// _ = s2.Store("coolPicture.jpg", data)
-	// time.Sleep(5 * time.Millisecond)
+	key := "coolPicture.jpg"
+	data := bytes.NewReader([]byte("my big data file here!"))
+	_ = s2.Store(key, data)
 
-	r, err := s2.Get("coolPicture.jpg")
+	if err := s2.Storage.Delete(key); err != nil {
+		log.Fatal(err)
+	}
+
+	r, err := s2.Get(key)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -62,5 +73,3 @@ func main() {
 
 	fmt.Println(string(b))
 }
-
-// 8:04. creating crypto file.
